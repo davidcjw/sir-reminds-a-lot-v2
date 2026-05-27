@@ -98,6 +98,59 @@ If yes:
 
 ---
 
+STEP 5.5 — Interactive setup: seed cards, categories, merchants, and rules
+
+Walk me through each section below in order. For each, accept either a typed
+answer or a dropped .csv / .md / .txt file (parse the file the same way).
+Insert everything directly into the database using db.py (the database path
+comes from DATABASE_PATH in .env, default ./data/bot.db):
+
+  python3 - <<'EOF'
+  import db, sys
+  db.init("./data/bot.db")
+  # ... insert calls here ...
+  EOF
+
+After ALL sections are done, print one combined summary of everything added.
+If anything is ambiguous, show what you parsed and ask me to confirm before
+inserting. Never insert the same value twice.
+
+── CATEGORIES ──────────────────────────────────────────────────────────────
+Ask: "What spending categories do you want? List them separated by commas,
+or one per line. Examples: Groceries, Dining, Transport, Shopping, Travel."
+Accept free text. Split on commas or newlines, trim whitespace, call
+db.add_category() for each.
+
+── CARDS ────────────────────────────────────────────────────────────────────
+Ask: "Add your credit/debit cards. For each card provide:
+  name, due day (e.g. 15, last), billing cycle start day (1 = calendar month)
+Separate fields with commas, one card per line. Example:
+  DBS Visa, 15, 1
+  UOB One, last, 13
+Leave due day or cycle blank to skip."
+Parse each line and call db.add_card(name, due_day, cycle_start).
+
+── MERCHANT → CATEGORY MAPPINGS ────────────────────────────────────────────
+Ask: "Do you want to load the default Singapore merchant list? It maps ~200
+common merchants (NTUC, Grab, Starbucks, Shopee, etc.) to categories like
+Groceries, Dining, Transport, Online Shopping, and more. (yes/no)"
+If yes: read merchant_categories.md from the repo root and call
+  db.add_merchant_alias(merchant, category) for every non-header table row.
+  Also call db.add_category(category) for any category not yet in the DB.
+If no: ask "Enter your own merchant → category mappings, one per line
+  (e.g. NTUC → Groceries). Leave blank to skip."
+  Parse and insert each.
+
+── CARD RULES (category → card recommendation) ──────────────────────────────
+Ask: "Set up card recommendations per category — when the user asks which
+card to use, the bot replies with your rule. One per line, e.g.:
+  Groceries → UOB One
+  Dining → DBS Live Fresh
+Leave blank to skip."
+Parse and call db.set_card_rule(category, recommendation) for each.
+
+---
+
 STEP 6 — Start the bot
 
 If using Docker:
@@ -119,7 +172,8 @@ Tell me to open Telegram and send /start to my bot. Confirm I see the main menu.
 
 Then print this message:
 "✅ Your bot is running! Next steps:
-  - Send /admin to set up your cards, categories, merchants, and rules.
+  - Your cards, categories, and merchants are configured — send /start to begin.
+  - Use /admin anytime to add, edit, or remove cards, categories, merchants, and rules.
   - Send /chatid to get your chat ID if you want to enable reminders later.
   - Send /help anytime to see all available commands.
   - Your data is stored in ./data/bot.db — back it up by copying that file."

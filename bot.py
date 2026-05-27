@@ -26,7 +26,7 @@ MENU_BUTTONS = [
 ]
 
 BUTTON_ALIASES = {
-    "💸 Log spend": "spend",
+    "💸 log spend": "spend",
     "log spend": "spend",
     "💬 log spend with remarks": "spend_with_remarks",
     "log spend with remarks": "spend_with_remarks",
@@ -50,6 +50,16 @@ def _main_menu_keyboard() -> ReplyKeyboardMarkup:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not db.get_cards():
+        await update.message.reply_text(
+            "👋 Welcome to Sir Reminds-A-Lot!\n\n"
+            "Before you can log spend, set up at least:\n"
+            "  1️⃣ One card  (e.g. DBS Visa)\n"
+            "  2️⃣ One category  (e.g. Food, Transport)\n\n"
+            "Run /admin to open setup.",
+            reply_markup=_main_menu_keyboard(),
+        )
+        return
     await update.message.reply_text(
         "👋 Hi! I'm your personal spend tracker.\n\n"
         "Use the menu below or type a command.\n"
@@ -100,11 +110,6 @@ async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     elif command == "what_card_to_use":
         context.args = []
         await cards.what_card_to_use(update, context)
-    elif command == "admin":
-        # Re-dispatch to admin via its entry point
-        context.args = []
-        from handlers.admin import admin_start
-        await admin_start(update, context)
 
 
 async def log_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -420,14 +420,15 @@ class DBTests(unittest.TestCase):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
+@patch('config.load_dotenv')
 class ConfigTests(unittest.TestCase):
-    def test_load_config_requires_token(self):
+    def test_load_config_requires_token(self, _dotenv):
         from config import load_config
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError):
                 load_config()
 
-    def test_load_config_returns_botconfig(self):
+    def test_load_config_returns_botconfig(self, _dotenv):
         from config import load_config, BotConfig
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "test-token"}, clear=True):
             cfg = load_config()
@@ -435,7 +436,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.token, "test-token")
         self.assertIsNone(cfg.reminder_chat_id)
 
-    def test_load_config_parses_reminder_chat_id(self):
+    def test_load_config_parses_reminder_chat_id(self, _dotenv):
         from config import load_config
         with patch.dict(os.environ, {
             "TELEGRAM_BOT_TOKEN": "tok",

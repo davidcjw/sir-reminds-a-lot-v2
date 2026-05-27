@@ -122,9 +122,13 @@ async def home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return HOME
 
     # ── Cards: add → transition to text input ─────────────────────────────────
-    if data == "adm:cards:add":
+    if data in ("adm:cards:add", "adm:cards:more"):
         await _edit(query, "Card name?")
         return ADD_CARD_NAME
+
+    if data == "adm:cards:done":
+        await _edit(query, "✅ Done adding cards.")
+        return _CANCEL
 
     # ── Cards: remove — show list ─────────────────────────────────────────────
     if data == "adm:cards:remove":
@@ -162,9 +166,13 @@ async def home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return HOME
 
     # ── Categories: add → transition ──────────────────────────────────────────
-    if data == "adm:cats:add":
-        await _edit(query, "Category name?")
+    if data in ("adm:cats:add", "adm:cats:more"):
+        await _edit(query, "Category name? (separate multiple with commas)")
         return ADD_CAT_NAME
+
+    if data == "adm:cats:done":
+        await _edit(query, "✅ Done adding categories.")
+        return _CANCEL
 
     # ── Categories: remove ────────────────────────────────────────────────────
     if data == "adm:cats:remove":
@@ -330,18 +338,33 @@ async def recv_card_cycle(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     due_day = adm.get("due_day")
     db.add_card(name, due_day, cycle_start)
     context.user_data.pop("adm", None)
-    await update.message.reply_text(f"✅ Added card: {name}")
-    return _CANCEL
+    await update.message.reply_text(
+        f"✅ Added card: {name}",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("➕ Add another card", callback_data="adm:cards:more"),
+            InlineKeyboardButton("✅ Done", callback_data="adm:cards:done"),
+        ]]),
+    )
+    return HOME
 
 
 async def recv_cat_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    name = (update.message.text or "").strip()
-    if not name:
+    raw = (update.message.text or "").strip()
+    if not raw:
         await update.message.reply_text("Category name can't be empty. Try again:")
         return ADD_CAT_NAME
-    db.add_category(name)
-    await update.message.reply_text(f"✅ Added category: {name}")
-    return _CANCEL
+    names = [n.strip() for n in raw.split(",") if n.strip()]
+    for name in names:
+        db.add_category(name)
+    added = ", ".join(names)
+    await update.message.reply_text(
+        f"✅ Added: {added}",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("➕ Add more", callback_data="adm:cats:more"),
+            InlineKeyboardButton("✅ Done", callback_data="adm:cats:done"),
+        ]]),
+    )
+    return HOME
 
 
 async def recv_merchant_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -387,7 +410,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 def get_handlers() -> list:
     conv = ConversationHandler(
-        entry_points=[CommandHandler("admin", admin_start)],
+        entry_points=[
+            CommandHandler("admin", admin_start),
+            MessageHandler(filters.Regex("^⚙️ Admin$"), admin_start),
+        ],
         states={
             HOME: [CallbackQueryHandler(home_callback, pattern=r"^adm:")],
             ADD_CARD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, recv_card_name)],
