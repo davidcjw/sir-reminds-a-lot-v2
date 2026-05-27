@@ -2,13 +2,21 @@
 
 A personal Telegram bot for tracking credit card spending and sending payment due-date reminders.
 
-- Logs spend entries to a local SQLite database
-- Summarises spend per card by billing period
-- Sends daily reminders for upcoming due dates
-- Type any merchant name in the chat to get the right card to use
-- Fully configured via bot commands — no files to edit
+- 📓 Logs spend entries to a local SQLite database
+- 🔖 Summarises spend per card by billing period
+- 🔔 Sends daily reminders for upcoming due dates
+- 💳 Type any merchant name in the chat to get the right card to use
+- 🤖 Fully configured via bot commands — no files to edit
+- 📁 Export your data to csv for your own book-keeping
 
-## AI-assisted setup
+## Requirements
+
+- Docker (recommended), or Python 3.11+
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+
+## Setup (MacOS, Linux/Ubuntu/Debian)
+
+### AI-assisted setup (*recommended*)
 
 Paste the prompt below into any AI agent (Claude, ChatGPT, Codex, etc.) and it will walk you through the entire installation interactively — including creating the Telegram bot, installing dependencies, and starting the bot.
 
@@ -173,12 +181,7 @@ If anything fails at any step, show me the error output and suggest a fix before
 continuing. Do not skip steps silently.
 ````
 
-## Requirements
-
-- Docker (recommended), or Python 3.11+
-- A Telegram bot token from [@BotFather](https://t.me/BotFather)
-
-## Setup
+### Manual setup
 
 **1. Clone and configure**
 
@@ -244,6 +247,8 @@ Just type any merchant name (e.g. `Starbucks`, `NTUC`, `Grab`) to get the recomm
 
 ## Hosting
 
+If you're setting up via AI assisted chat, ensure you install the relevant LLM tool (e.g. Claude).
+
 The bot needs to run continuously to send reminders. Three options, from easiest to most control:
 
 ### Fly.io (recommended for most people)
@@ -296,7 +301,7 @@ Requires Docker installed on the Pi (`apt install docker.io docker-compose-plugi
 
 ## Data
 
-Spend data is stored in `./data/bot.db` (SQLite). The `data/` directory is volume-mounted in Docker so it persists across restarts. Back it up by copying the file.
+Spend data is stored locally in `./data/bot.db` (SQLite). The `data/` directory is volume-mounted in Docker so it persists across restarts. Back it up by copying the file.
 
 ## Development
 
