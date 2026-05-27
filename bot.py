@@ -20,9 +20,8 @@ logger = logging.getLogger(__name__)
 MENU_BUTTONS = [
     ["💸 Log spend", "💬 Log spend with remarks"],
     ["📊 Spend Summary", "📈 Category Chart"],
-    ["💳 What card?", "📅 Due dates"],
-    ["🔔 Reminders", "⚙️ Admin"],
-    ["✨ Help"],
+    ["📅 Due dates", "🔔 Reminders"],
+    ["⚙️ Admin", "✨ Help"],
 ]
 
 BUTTON_ALIASES = {
@@ -34,8 +33,6 @@ BUTTON_ALIASES = {
     "spend summary": "spend_summary",
     "📈 category chart": "category_chart",
     "category chart": "category_chart",
-    "💳 what card?": "what_card_to_use",
-    "what card": "what_card_to_use",
     "📅 due dates": "due",
     "due dates": "due",
     "🔔 reminders": "reminders",
@@ -73,7 +70,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/spend — log a spend entry\n"
         "/spend_summary — show spend by card this billing period\n"
         "/category_chart — pie chart of spend by category this month\n"
-        "/what_card_to_use <category> — card recommendation\n"
         "/due — show card due dates\n"
         "/reminders — check upcoming due dates\n"
         "/delete_last — delete the most recent spend entry\n"
@@ -92,6 +88,7 @@ async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = (update.message.text or "").strip().lower()
     command = BUTTON_ALIASES.get(text)
     if not command:
+        await cards.merchant_lookup(update, context)
         return
 
     # Route to the appropriate handler by simulating the command
@@ -107,9 +104,7 @@ async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await handler_map[command](update, context)
     elif command == "spend_with_remarks":
         await spend.spend_with_remarks_start(update, context)
-    elif command == "what_card_to_use":
-        context.args = []
-        await cards.what_card_to_use(update, context)
+
 
 
 async def log_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

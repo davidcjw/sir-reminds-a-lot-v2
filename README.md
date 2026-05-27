@@ -5,6 +5,7 @@ A personal Telegram bot for tracking credit card spending and sending payment du
 - Logs spend entries to a local SQLite database
 - Summarises spend per card by billing period
 - Sends daily reminders for upcoming due dates
+- Type any merchant name in the chat to get the right card to use
 - Fully configured via bot commands — no files to edit
 
 ## AI-assisted setup
@@ -75,9 +76,6 @@ Run:
   git clone https://github.com/davidcjw/sir-reminds-a-lot-v2.git
   cd sir-reminds-a-lot-v2
 
-(Replace <owner> with the actual GitHub username/org if known. If not, ask me for
-the repo URL before running.)
-
 ---
 
 STEP 5 — Configure environment
@@ -106,8 +104,9 @@ Insert everything directly into the database using db.py (the database path
 comes from DATABASE_PATH in .env, default ./data/bot.db):
 
   python3 - <<'EOF'
-  import db, sys
-  db.init("./data/bot.db")
+  from pathlib import Path
+  import db
+  db.init(Path("./data/bot.db"))
   # ... insert calls here ...
   EOF
 
@@ -140,14 +139,6 @@ If yes: read merchant_categories.md from the repo root and call
 If no: ask "Enter your own merchant → category mappings, one per line
   (e.g. NTUC → Groceries). Leave blank to skip."
   Parse and insert each.
-
-── CARD RULES (category → card recommendation) ──────────────────────────────
-Ask: "Set up card recommendations per category — when the user asks which
-card to use, the bot replies with your rule. One per line, e.g.:
-  Groceries → UOB One
-  Dining → DBS Live Fresh
-Leave blank to skip."
-Parse and call db.set_card_rule(category, recommendation) for each.
 
 ---
 
@@ -237,12 +228,13 @@ Restart the bot after editing `.env`.
 
 ## Commands
 
+Just type any merchant name (e.g. `Starbucks`, `NTUC`, `Grab`) to get the recommended card for that spend. Punctuation is ignored — `McDonald's` and `McDonalds` both work. For merchants mapped to the "Shopping" sentinel, the bot will ask whether the purchase is in-store or online before replying.
+
 | Command | Description |
 |---------|-------------|
 | `/spend` | Log a spend entry |
 | `/spend_summary` | Spend by card for the current billing period |
 | `/category_chart` | Pie chart of spend by category this month |
-| `/what_card_to_use <category>` | Card recommendation for a category |
 | `/due` | Upcoming card due dates |
 | `/reminders` | Check what's due within your reminder window |
 | `/delete_last` | Delete the most recent spend entry (with confirmation) |
