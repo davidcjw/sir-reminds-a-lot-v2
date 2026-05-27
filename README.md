@@ -72,7 +72,7 @@ Store the token as BOT_TOKEN for use in Step 5.
 STEP 4 — Clone the repository
 
 Run:
-  git clone https://github.com/<owner>/sir-reminds-a-lot-v2.git
+  git clone https://github.com/davidcjw/sir-reminds-a-lot-v2.git
   cd sir-reminds-a-lot-v2
 
 (Replace <owner> with the actual GitHub username/org if known. If not, ask me for
@@ -138,7 +138,7 @@ continuing. Do not skip steps silently.
 **1. Clone and configure**
 
 ```bash
-git clone <repo> && cd sir-reminds-a-lot-v2
+git clone https://github.com/davidcjw/sir-reminds-a-lot-v2.git && cd sir-reminds-a-lot-v2
 cp .env.example .env
 ```
 
@@ -220,7 +220,7 @@ A Hetzner CX22 (~€4/month) is more than enough. SSH in and run:
 
 ```bash
 apt install docker.io docker-compose-plugin
-git clone <repo> && cd sir-reminds-a-lot-v2
+git clone https://github.com/davidcjw/sir-reminds-a-lot-v2.git && cd sir-reminds-a-lot-v2
 cp .env.example .env && nano .env
 docker compose up -d
 ```
@@ -233,7 +233,7 @@ Same Docker setup as VPS. No monthly cost and data never leaves your machine.
 
 ```bash
 # On the Pi:
-git clone <repo> && cd sir-reminds-a-lot-v2
+git clone https://github.com/davidcjw/sir-reminds-a-lot-v2.git && cd sir-reminds-a-lot-v2
 cp .env.example .env && nano .env
 docker compose up -d
 ```
