@@ -1,6 +1,23 @@
 # Sir Reminds A Lot
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Docker](https://img.shields.io/badge/docker-supported-blue)
+
 A personal Telegram bot for tracking credit card spending and sending payment due-date reminders.
+
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Setup](#setup-macos-linuxubuntudebian)
+- [Optional: Daily Reminders](#optional-daily-reminders)
+- [Commands](#commands)
+- [Hosting](#hosting)
+- [Data](#data)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Code of Conduct](#code-of-conduct)
+- [License](#license)
 
 - 📓 Logs spend entries to a local SQLite database
 - 🔖 Summarises spend per card by billing period
@@ -309,3 +326,22 @@ Spend data is stored locally in `./data/bot.db` (SQLite). The `data/` directory 
 pip install -r requirements.txt
 python -m pytest test_bot.py -v
 ```
+
+## Contributing
+
+Contributions are welcome! Please open an issue first to discuss what you'd like to change.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes (`git commit -m 'feat: describe change'`)
+4. Push and open a pull request
+
+Please make sure tests pass (`python -m pytest test_bot.py -v`) before submitting a PR.
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). By participating you agree to uphold a welcoming, harassment-free environment.
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
