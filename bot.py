@@ -4,6 +4,7 @@ import logging
 import sys
 
 from telegram import ReplyKeyboardMarkup, Update
+from telegram.constants import MessageEntityType
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 import db
@@ -86,6 +87,9 @@ async def chatid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user and update.effective_user.is_bot:
+        return
+    entities = update.message.entities or []
+    if any(e.type in (MessageEntityType.URL, MessageEntityType.TEXT_LINK) for e in entities):
         return
 
     text = (update.message.text or "").strip().lower()
