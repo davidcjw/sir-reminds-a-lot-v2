@@ -150,7 +150,10 @@ def main() -> int:
     app.add_handler(spend.remark_handler, group=-1)
 
     # Menu button text → command routing (lowest priority)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_button))
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & ~filters.Entity("url") & ~filters.Entity("text_link"),
+        menu_button,
+    ))
 
     app.add_error_handler(log_error)
 
