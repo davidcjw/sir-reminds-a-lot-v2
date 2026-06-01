@@ -85,6 +85,10 @@ async def chatid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    entities = update.message.entities or []
+    if any(e.type in ("url", "text_link") for e in entities):
+        return
+
     text = (update.message.text or "").strip().lower()
     command = BUTTON_ALIASES.get(text)
     if not command:
@@ -150,10 +154,7 @@ def main() -> int:
     app.add_handler(spend.remark_handler, group=-1)
 
     # Menu button text → command routing (lowest priority)
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & ~filters.Entity("url") & ~filters.Entity("text_link"),
-        menu_button,
-    ))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_button))
 
     app.add_error_handler(log_error)
 
