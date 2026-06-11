@@ -1,13 +1,14 @@
 """One-off migration from sir-reminds-a-lot (v1) markdown files to the v2 SQLite DB.
 
-Parses categories.md, creditcards.md and merchant_categories.md from the v1
-repo and pre-populates the categories, cards and merchant_aliases tables.
+Parses categories.md, creditcards.md, merchant_categories.md and
+card_categories.md from the v1 repo and pre-populates the categories, cards,
+merchant_aliases and card_rules tables.
 
 Usage:
     python migrate_v1.py [--source ../sir-reminds-a-lot] [--db ./data/bot.db]
 
-Safe to re-run: categories use INSERT OR IGNORE, cards and merchant aliases
-use INSERT OR REPLACE.
+Safe to re-run: categories use INSERT OR IGNORE, cards, merchant aliases and
+card rules use INSERT OR REPLACE.
 """
 
 from __future__ import annotations
@@ -57,6 +58,38 @@ def parse_cards(path: Path) -> list[tuple[str, str | None, int]]:
     return cards
 
 
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FFFF"
+    "\U00002702-\U000027B0"
+    "\U000024C2-\U0001F251"
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def _strip_emoji(text: str) -> str:
+    return _EMOJI_RE.sub("", text).strip()
+
+
+def parse_card_rules(path: Path) -> list[tuple[str, str]]:
+    """Parse '| 🛒 Groceries | UOB Ladies Solitaire |' → ('Groceries', 'UOB Ladies Solitaire')."""
+    rules = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) != 2:
+            continue
+        category, recommendation = cells
+        category = _strip_emoji(category)
+        if category in ("Category", "---") or not category or not recommendation or "---" in recommendation:
+            continue
+        rules.append((category, recommendation))
+    return rules
+
+
 def parse_merchant_aliases(path: Path) -> list[tuple[str, str]]:
     aliases = []
     for line in path.read_text().splitlines():
@@ -93,6 +126,7 @@ def main() -> int:
         "categories": args.source / "categories.md",
         "cards": args.source / "creditcards.md",
         "aliases": args.source / "merchant_categories.md",
+        "rules": args.source / "card_categories.md",
     }
     missing = [str(p) for p in files.values() if not p.exists()]
     if missing:
@@ -102,6 +136,7 @@ def main() -> int:
     categories = parse_categories(files["categories"])
     cards = parse_cards(files["cards"])
     aliases = parse_merchant_aliases(files["aliases"])
+    rules = parse_card_rules(files["rules"])
 
     db.init(args.db)
     for name in categories:
@@ -110,11 +145,14 @@ def main() -> int:
         db.add_card(name, due_day, cycle_start)
     for merchant, category in aliases:
         db.add_merchant_alias(merchant, category)
+    for category, recommendation in rules:
+        db.set_card_rule(category, recommendation)
 
     print(f"Migrated into {args.db}:")
     print(f"  {len(categories)} categories")
     print(f"  {len(cards)} cards")
     print(f"  {len(aliases)} merchant aliases")
+    print(f"  {len(rules)} card rules")
     return 0
 
 
