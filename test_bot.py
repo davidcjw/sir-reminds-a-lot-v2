@@ -417,6 +417,16 @@ class DBTests(unittest.TestCase):
         _db.execute("ALTER TABLE spend_entries_old RENAME TO spend_entries")
         _db.commit()
 
+    def test_init_rejects_unwritable_database_file(self):
+        db_path = Path(self._tmp.name)
+
+        def fake_access(path, mode):
+            return Path(path) != db_path
+
+        with patch("db.os.access", side_effect=fake_access):
+            with self.assertRaisesRegex(db.DatabasePermissionError, "Database file exists but is not writable"):
+                db.init(db_path)
+
 
 # ── Config ────────────────────────────────────────────────────────────────────
 

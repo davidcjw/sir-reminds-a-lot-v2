@@ -273,6 +273,26 @@ sudo systemctl status sir-reminds-a-lot
 journalctl -u sir-reminds-a-lot -f
 ```
 
+If logs show `sqlite3.OperationalError: attempt to write a readonly database`,
+make sure the service user owns both the database file and the `data` directory.
+SQLite needs directory write access so it can create journal files.
+
+```bash
+cd /home/youruser/sir-reminds-a-lot-v2
+sudo systemctl stop sir-reminds-a-lot
+mkdir -p data
+sudo chown -R youruser:youruser data
+chmod u+rwX data data/bot.db 2>/dev/null || true
+sudo systemctl start sir-reminds-a-lot
+```
+
+For systemd, prefer an absolute database path in `.env` so it does not depend on
+the process working directory:
+
+```env
+DATABASE_PATH=/home/youruser/sir-reminds-a-lot-v2/data/bot.db
+```
+
 **3. Configure via the bot**
 
 Send `/admin` to the bot and use the inline menu to set up:

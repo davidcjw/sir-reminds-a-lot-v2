@@ -125,7 +125,11 @@ def main() -> int:
         print(f"Config error: {e}", file=sys.stderr)
         return 1
 
-    db.init(config.database_path)
+    try:
+        db.init(config.database_path)
+    except db.DatabasePermissionError as e:
+        print(f"Database error: {e}", file=sys.stderr)
+        return 1
 
     app = (
         Application.builder()

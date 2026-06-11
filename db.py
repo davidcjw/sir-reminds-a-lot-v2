@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from datetime import date, datetime
 from decimal import Decimal
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 _conn: sqlite3.Connection | None = None
+_WRITE_PROBE_CATEGORY = "__sir_reminds_write_probe__"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS cards (
@@ -58,19 +60,68 @@ class SpendEntry(NamedTuple):
     remarks: str | None = None
 
 
+class DatabasePermissionError(RuntimeError):
+    pass
+
+
+def _permission_message(path: Path, detail: str) -> str:
+    return (
+        f"SQLite database is not writable: {path}. {detail} "
+        "Check that DATABASE_PATH points to a writable location and that the "
+        "service user owns both the database file and its parent directory."
+    )
+
+
+def _validate_writable_path(path: Path) -> None:
+    parent = path.parent
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise DatabasePermissionError(
+            _permission_message(path, f"Could not create parent directory {parent}: {exc}.")
+        ) from exc
+
+    if not parent.is_dir():
+        raise DatabasePermissionError(
+            _permission_message(path, f"Parent path {parent} is not a directory.")
+        )
+    if not os.access(parent, os.W_OK):
+        raise DatabasePermissionError(
+            _permission_message(path, f"Parent directory {parent} is not writable.")
+        )
+    if path.exists() and not os.access(path, os.W_OK):
+        raise DatabasePermissionError(
+            _permission_message(path, "Database file exists but is not writable.")
+        )
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(spend_entries)")}
     if "remarks" not in cols:
         conn.execute("ALTER TABLE spend_entries ADD COLUMN remarks TEXT")
 
 
+def _assert_sqlite_writable(conn: sqlite3.Connection, path: Path) -> None:
+    try:
+        conn.execute("SAVEPOINT write_probe")
+        conn.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (_WRITE_PROBE_CATEGORY,))
+        conn.execute("ROLLBACK TO write_probe")
+        conn.execute("RELEASE write_probe")
+    except sqlite3.OperationalError as exc:
+        raise DatabasePermissionError(
+            _permission_message(path, f"SQLite rejected a write probe: {exc}.")
+        ) from exc
+
+
 def init(path: Path) -> None:
     global _conn
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = path.expanduser()
+    _validate_writable_path(path)
     _conn = sqlite3.connect(str(path), check_same_thread=False)
     _conn.row_factory = sqlite3.Row
     _conn.executescript(_SCHEMA)
     _migrate(_conn)
+    _assert_sqlite_writable(_conn, path)
     _conn.commit()
 
 
