@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import csv
 import io
 import logging
@@ -16,6 +17,25 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 
+def _parse_month_arg(args: list[str] | None) -> tuple[date, date, date]:
+    """Parse optional YYYY-MM arg; returns (month_start, month_end, ref_date).
+
+    ref_date is the first day of the month, used as 'today' for chart/aggregate
+    functions that filter by today.year/today.month.
+    """
+    today = date.today()
+    if args:
+        try:
+            ref = datetime.strptime(args[0], "%Y-%m").date()
+        except ValueError:
+            ref = today.replace(day=1)
+    else:
+        ref = today.replace(day=1)
+
+    last_day = calendar.monthrange(ref.year, ref.month)[1]
+    return date(ref.year, ref.month, 1), date(ref.year, ref.month, last_day), ref
+
+
 async def spend_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     today = date.today()
     cards = db.get_cards()
@@ -25,20 +45,22 @@ async def spend_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def category_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    today = date.today()
-    rows = db.get_all_spend_rows()
-    totals = aggregate_category_totals(rows, today)
+    start, end, ref = _parse_month_arg(context.args)
+    rows = db.get_spend_rows_in_range(start, end)
+    totals = aggregate_category_totals(rows, ref)
 
     if not totals:
-        await update.effective_message.reply_text("No spend logged this month.")
+        await update.effective_message.reply_text(
+            f"No spend logged for {ref.strftime('%B %Y')}."
+        )
         return
 
-    image_bytes = build_category_pie_image(rows, today)
+    image_bytes = build_category_pie_image(rows, ref)
     if image_bytes:
         await update.effective_message.reply_photo(photo=image_bytes)
     else:
         grand_total = sum(totals.values())
-        lines = [f"📊 Spend by Category — {today.strftime('%B %Y')}", ""]
+        lines = [f"📊 Spend by Category — {ref.strftime('%B %Y')}", ""]
         for cat, total in sorted(totals.items(), key=lambda x: x[1], reverse=True):
             pct = int(total / grand_total * 100)
             lines.append(f"• {cat}: ${format_money(total)} ({pct}%)")
@@ -47,9 +69,13 @@ async def category_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    rows = db.get_all_spend_rows()
+    start, end, ref = _parse_month_arg(context.args)
+    rows = db.get_spend_rows_in_range(start, end)
+
     if not rows:
-        await update.effective_message.reply_text("No spend data to export.")
+        await update.effective_message.reply_text(
+            f"No spend data for {ref.strftime('%B %Y')}."
+        )
         return
 
     buf = io.StringIO()
@@ -58,10 +84,11 @@ async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     for row in rows:
         writer.writerow([row.timestamp, row.amount, row.card, row.category, row.remarks or ""])
 
+    month_str = ref.strftime("%Y-%m")
     await update.effective_message.reply_document(
         document=buf.getvalue().encode(),
-        filename=f"spend_export_{date.today()}.csv",
-        caption=f"Exported {len(rows)} entries.",
+        filename=f"spend_export_{month_str}.csv",
+        caption=f"Exported {len(rows)} entries for {ref.strftime('%B %Y')}.",
     )
 
 

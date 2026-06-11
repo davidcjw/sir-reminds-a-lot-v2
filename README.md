@@ -222,6 +222,57 @@ pip install -r requirements.txt
 python bot.py
 ```
 
+**Run as a systemd service (Linux)**
+
+To keep the bot running after logout and have it auto-start on reboot:
+
+```bash
+# Create a virtual environment and install dependencies
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Create the service file (replace `/home/youruser/sir-reminds-a-lot-v2` with your actual path and `youruser` with your Linux username):
+
+```bash
+sudo nano /etc/systemd/system/sir-reminds-a-lot.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=Sir Reminds A Lot Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/home/youruser/sir-reminds-a-lot-v2
+EnvironmentFile=/home/youruser/sir-reminds-a-lot-v2/.env
+ExecStart=/home/youruser/sir-reminds-a-lot-v2/.venv/bin/python bot.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable sir-reminds-a-lot
+sudo systemctl start sir-reminds-a-lot
+```
+
+Check status and logs:
+
+```bash
+sudo systemctl status sir-reminds-a-lot
+journalctl -u sir-reminds-a-lot -f
+```
+
 **3. Configure via the bot**
 
 Send `/admin` to the bot and use the inline menu to set up:
