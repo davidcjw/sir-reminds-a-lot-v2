@@ -2,7 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +21,7 @@ from logic.formatting import (
     update_spend_amount,
 )
 from logic.chart import build_category_pie_image
+from handlers.reminders import _next_run
 
 
 # ── Billing period ────────────────────────────────────────────────────────────
@@ -115,6 +116,27 @@ class DueDateReminderTests(unittest.TestCase):
         self.assertIn("Amex", messages[0])
         self.assertIn("in 3 days", messages[0])
         self.assertIn("today", messages[0])
+
+
+# ── Reminder scheduling ─────────────────────────────────────────────────────────
+
+class NextRunTests(unittest.TestCase):
+    def test_same_day_when_time_not_yet_passed(self):
+        now = datetime(2026, 5, 15, 8, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 15, 9, 0))
+
+    def test_rolls_to_next_day_when_time_passed(self):
+        now = datetime(2026, 5, 15, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 16, 9, 0))
+
+    def test_rolls_over_last_day_of_month(self):
+        # Regression: day+1 used to raise ValueError on month-end, killing the loop.
+        now = datetime(2026, 5, 31, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 6, 1, 9, 0))
+
+    def test_rolls_over_year_end(self):
+        now = datetime(2026, 12, 31, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 1, 1, 9, 0))
 
 
 # ── Spend amount ──────────────────────────────────────────────────────────────
