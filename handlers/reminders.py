@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from telegram import Update
@@ -55,7 +55,7 @@ def _next_run(now: datetime, reminder_time: time) -> datetime:
         microsecond=0,
     )
     if candidate <= now:
-        candidate = candidate.replace(day=candidate.day + 1)
+        candidate += timedelta(days=1)
     return candidate
 
 
