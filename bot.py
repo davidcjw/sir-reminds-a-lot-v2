@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 MENU_BUTTONS = [
     ["💸 Log spend", "💬 Log spend with remarks"],
     ["📊 Spend Summary", "📈 Category Chart"],
-    ["📅 Due dates", "🔔 Reminders"],
-    ["⚙️ Admin", "✨ Help"],
+    ["🧾 Transactions", "📅 Due dates"],
+    ["🔔 Reminders", "⚙️ Admin"],
+    ["✨ Help"],
 ]
 
 BUTTON_ALIASES = {
@@ -32,6 +33,8 @@ BUTTON_ALIASES = {
     "log spend with remarks": "spend_with_remarks",
     "📊 spend summary": "spend_summary",
     "spend summary": "spend_summary",
+    "🧾 transactions": "transactions",
+    "transactions": "transactions",
     "📈 category chart": "category_chart",
     "category chart": "category_chart",
     "📅 due dates": "due",
@@ -70,6 +73,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "/spend — log a spend entry\n"
         "/spend_summary — show spend by card this billing period\n"
+        "/transactions — show your latest 5 transactions\n"
         "/category_chart — pie chart of spend by category this month\n"
         "/due — show card due dates\n"
         "/reminders — check upcoming due dates\n"
@@ -102,6 +106,7 @@ async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     handler_map = {
         "spend": spend.spend_start,
         "spend_summary": summary.spend_summary,
+        "transactions": summary.transactions,
         "category_chart": summary.category_chart,
         "due": cards.due_dates,
         "reminders": reminders.reminders_command,
