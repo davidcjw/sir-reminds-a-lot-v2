@@ -10,9 +10,22 @@ from logic.billing import billing_period, find_due_reminders
 
 MONEY_QUANTIZER = Decimal("0.01")
 
+# Matches "one-off", "one off" or "oneoff" anywhere in a category or remark,
+# case-insensitively. Used to flag irregular spend that can be excluded from
+# the category chart.
+_ONE_OFF_RE = re.compile(r"\bone[\s-]?off\b", re.IGNORECASE)
+
 
 def normalize(value: str) -> str:
     return re.sub(r"\s+", " ", value.lower().strip())
+
+
+def is_one_off(entry: SpendEntry) -> bool:
+    """True when a spend entry is tagged one-off via its category or remark."""
+    return bool(
+        _ONE_OFF_RE.search(entry.category or "")
+        or _ONE_OFF_RE.search(entry.remarks or "")
+    )
 
 
 def format_money(amount: Decimal) -> str:
@@ -120,7 +133,9 @@ def build_recent_transactions_message(rows: list[SpendEntry], limit: int = 5) ->
     return "\n".join(lines)
 
 
-def aggregate_category_totals(rows: list[SpendEntry], today: date) -> dict[str, Decimal]:
+def aggregate_category_totals(
+    rows: list[SpendEntry], today: date, exclude_one_off: bool = False
+) -> dict[str, Decimal]:
     totals: dict[str, Decimal] = {}
     for row in rows:
         try:
@@ -129,6 +144,8 @@ def aggregate_category_totals(rows: list[SpendEntry], today: date) -> dict[str, 
         except (ValueError, InvalidOperation):
             continue
         if row_date.year != today.year or row_date.month != today.month:
+            continue
+        if exclude_one_off and is_one_off(row):
             continue
         category = row.category.strip() or "Uncategorized"
         totals[category] = totals.get(category, Decimal("0")) + amount
