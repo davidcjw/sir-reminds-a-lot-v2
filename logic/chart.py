@@ -11,8 +11,10 @@ from db import SpendEntry
 from logic.formatting import aggregate_category_totals
 
 
-def build_category_pie_image(rows: list[SpendEntry], today: date) -> bytes | None:
-    totals = aggregate_category_totals(rows, today)
+def build_category_pie_image(
+    rows: list[SpendEntry], today: date, exclude_one_off: bool = False
+) -> bytes | None:
+    totals = aggregate_category_totals(rows, today, exclude_one_off=exclude_one_off)
     if not totals:
         return None
 
@@ -59,8 +61,11 @@ def build_category_pie_image(rows: list[SpendEntry], today: date) -> bytes | Non
         frameon=False,
         labelcolor="white",
     )
+    title = f"Spend by Category — {today.strftime('%B %Y')}"
+    if exclude_one_off:
+        title += " (excl. one-off)"
     ax.set_title(
-        f"Spend by Category — {today.strftime('%B %Y')}\nTotal: ${grand_total:,.2f}",
+        f"{title}\nTotal: ${grand_total:,.2f}",
         color="white",
         fontsize=12,
         pad=14,

@@ -17,6 +17,7 @@ from logic.formatting import (
     build_due_reminder_messages,
     build_spend_summary_message,
     find_matching_rules,
+    is_one_off,
     parse_spend_amount,
     update_spend_amount,
 )
@@ -266,6 +267,65 @@ class CategoryChartTests(unittest.TestCase):
         rows = self._rows([("2026-04-10 10:00:00", "50.00", "DBS", "Groceries")])
         result = build_category_pie_image(rows, date(2026, 5, 17))
         self.assertIsNone(result)
+
+    def test_excludes_one_off_by_category(self):
+        rows = self._rows([
+            ("2026-05-10 10:00:00", "50.00", "DBS", "Groceries"),
+            ("2026-05-11 10:00:00", "2000.00", "DBS", "One-off"),
+        ])
+        totals = aggregate_category_totals(rows, date(2026, 5, 17), exclude_one_off=True)
+        self.assertEqual(totals, {"Groceries": Decimal("50.00")})
+
+    def test_excludes_one_off_by_remark(self):
+        rows = self._rows([
+            ("2026-05-10 10:00:00", "50.00", "DBS", "Groceries", None),
+            ("2026-05-11 10:00:00", "1200.00", "DBS", "Electronics", "one-off laptop"),
+        ])
+        totals = aggregate_category_totals(rows, date(2026, 5, 17), exclude_one_off=True)
+        self.assertEqual(totals, {"Groceries": Decimal("50.00")})
+
+    def test_keeps_one_off_when_not_excluded(self):
+        rows = self._rows([
+            ("2026-05-10 10:00:00", "50.00", "DBS", "Groceries"),
+            ("2026-05-11 10:00:00", "2000.00", "DBS", "One-off"),
+        ])
+        totals = aggregate_category_totals(rows, date(2026, 5, 17))
+        self.assertEqual(totals["One-off"], Decimal("2000.00"))
+
+    def test_pie_image_returns_none_when_only_one_off_excluded(self):
+        rows = self._rows([("2026-05-11 10:00:00", "2000.00", "DBS", "One-off")])
+        result = build_category_pie_image(rows, date(2026, 5, 17), exclude_one_off=True)
+        self.assertIsNone(result)
+
+    def _rendered_title(self, exclude_one_off=False):
+        rows = self._rows([("2026-05-10 10:00:00", "100.00", "DBS", "Groceries")])
+        with patch("matplotlib.axes.Axes.set_title") as set_title:
+            build_category_pie_image(rows, date(2026, 5, 17), exclude_one_off=exclude_one_off)
+        set_title.assert_called_once()
+        return set_title.call_args.args[0]
+
+    def test_pie_image_title_uses_computed_month(self):
+        title = self._rendered_title()
+        self.assertIn("Spend by Category — May 2026", title)
+        self.assertNotIn("excl. one-off", title)
+
+    def test_pie_image_title_marks_excluded_one_off(self):
+        title = self._rendered_title(exclude_one_off=True)
+        self.assertIn("Spend by Category — May 2026 (excl. one-off)", title)
+
+
+class OneOffDetectionTests(unittest.TestCase):
+    def test_detects_one_off_variants_in_category(self):
+        for cat in ("One-off", "one off", "ONEOFF", "Big One-Off Buys"):
+            self.assertTrue(is_one_off(SpendEntry("2026-05-10 10:00:00", "1", "DBS", cat)))
+
+    def test_detects_one_off_in_remark(self):
+        entry = SpendEntry("2026-05-10 10:00:00", "1", "DBS", "Electronics", "one-off TV")
+        self.assertTrue(is_one_off(entry))
+
+    def test_regular_entry_is_not_one_off(self):
+        entry = SpendEntry("2026-05-10 10:00:00", "1", "DBS", "Groceries", "weekly run")
+        self.assertFalse(is_one_off(entry))
 
 
 # ── Card rule lookup ──────────────────────────────────────────────────────────

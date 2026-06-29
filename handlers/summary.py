@@ -6,8 +6,8 @@ import io
 import logging
 from datetime import date, timezone, datetime
 
-from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
 import db
 from logic.chart import build_category_pie_image
@@ -44,28 +44,57 @@ async def spend_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.effective_message.reply_text(text)
 
 
+def _one_off_prompt_keyboard(month_str: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Yes", callback_data=f"chart:exclude:{month_str}"),
+         InlineKeyboardButton("No", callback_data=f"chart:include:{month_str}")],
+    ])
+
+
 async def category_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    start, end, ref = _parse_month_arg(context.args)
+    # Ask whether to exclude one-off transactions before building the chart.
+    # The chosen month is carried through the callback via the button payload.
+    _, _, ref = _parse_month_arg(context.args)
+    await update.effective_message.reply_text(
+        "Exclude one-off transactions?",
+        reply_markup=_one_off_prompt_keyboard(ref.strftime("%Y-%m")),
+    )
+
+
+async def category_chart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    # Payload: chart:{exclude|include}:{YYYY-MM}
+    parts = (query.data or "").split(":")
+    exclude_one_off = len(parts) > 1 and parts[1] == "exclude"
+    month_arg = parts[2] if len(parts) > 2 else None
+    start, end, ref = _parse_month_arg([month_arg] if month_arg else None)
+
     rows = db.get_spend_rows_in_range(start, end)
-    totals = aggregate_category_totals(rows, ref)
+    totals = aggregate_category_totals(rows, ref, exclude_one_off=exclude_one_off)
 
     if not totals:
-        await update.effective_message.reply_text(
-            f"No spend logged for {ref.strftime('%B %Y')}."
+        suffix = " after excluding one-off transactions" if exclude_one_off else ""
+        await query.edit_message_text(
+            f"No spend logged for {ref.strftime('%B %Y')}{suffix}."
         )
         return
 
-    image_bytes = build_category_pie_image(rows, ref)
+    label = " (excluding one-off)" if exclude_one_off else ""
+    await query.edit_message_text(f"📈 Spend by Category — {ref.strftime('%B %Y')}{label}")
+
+    image_bytes = build_category_pie_image(rows, ref, exclude_one_off=exclude_one_off)
     if image_bytes:
-        await update.effective_message.reply_photo(photo=image_bytes)
+        await query.message.reply_photo(photo=image_bytes)
     else:
         grand_total = sum(totals.values())
-        lines = [f"📊 Spend by Category — {ref.strftime('%B %Y')}", ""]
+        lines = [f"📊 Spend by Category — {ref.strftime('%B %Y')}{label}", ""]
         for cat, total in sorted(totals.items(), key=lambda x: x[1], reverse=True):
             pct = int(total / grand_total * 100)
             lines.append(f"• {cat}: ${format_money(total)} ({pct}%)")
         lines += ["", f"Total: ${format_money(grand_total)}"]
-        await update.effective_message.reply_text("\n".join(lines))
+        await query.message.reply_text("\n".join(lines))
 
 
 async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -97,4 +126,5 @@ def get_handlers() -> list:
         CommandHandler("spend_summary", spend_summary),
         CommandHandler("category_chart", category_chart),
         CommandHandler("export", export_csv),
+        CallbackQueryHandler(category_chart_callback, pattern=r"^chart:"),
     ]

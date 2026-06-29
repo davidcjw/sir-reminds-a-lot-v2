@@ -325,13 +325,15 @@ Just type any merchant name (e.g. `Starbucks`, `NTUC`, `Grab`) to get the recomm
 |---------|-------------|
 | `/spend` | Log a spend entry |
 | `/spend_summary` | Spend by card for the current billing period |
-| `/category_chart` | Pie chart of spend by category this month |
+| `/category_chart` | Pie chart of spend by category this month (asks whether to exclude one-off transactions first) |
 | `/due` | Upcoming card due dates |
 | `/reminders` | Check what's due within your reminder window |
 | `/delete_last` | Delete the most recent spend entry (with confirmation) |
 | `/export` | Download all spend data as a CSV file |
 | `/admin` | Manage cards, categories, merchants, and rules |
 | `/chatid` | Show this chat's ID |
+
+When you open `/category_chart`, the bot first asks **"Exclude one-off transactions?"** with Yes/No buttons. A transaction counts as one-off when its **category** or **remark** contains "one-off" (e.g. a `One-off` category, or a remark like `one-off laptop`). Choosing Yes drops those entries so the chart reflects your regular spending.
 
 ## Hosting
 
