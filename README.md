@@ -325,6 +325,7 @@ Just type any merchant name (e.g. `Starbucks`, `NTUC`, `Grab`) to get the recomm
 |---------|-------------|
 | `/spend` | Log a spend entry |
 | `/spend_summary` | Spend by card for the current billing period |
+| `/transactions` | Show your latest 5 transactions |
 | `/category_chart` | Pie chart of spend by category this month (asks whether to exclude one-off transactions first) |
 | `/due` | Upcoming card due dates |
 | `/reminders` | Check what's due within your reminder window |

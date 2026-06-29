@@ -15,6 +15,7 @@ from logic.billing import billing_period, find_due_reminders
 from logic.formatting import (
     aggregate_category_totals,
     build_due_reminder_messages,
+    build_recent_transactions_message,
     build_spend_summary_message,
     find_matching_rules,
     is_one_off,
@@ -218,6 +219,29 @@ class SpendSummaryTests(unittest.TestCase):
         rows = self._rows([("2026-04-15 10:00:00", "50.00", "DBS", "Food")])
         msg = build_spend_summary_message(cards, rows, date(2026, 5, 17))
         self.assertEqual(msg, "No spend logged in the current billing period.")
+
+
+class RecentTransactionsTests(unittest.TestCase):
+    def _rows(self, entries):
+        return [SpendEntry(*e) for e in entries]
+
+    def test_lists_entries_with_details(self):
+        rows = self._rows([
+            ("2026-05-12 11:00:00", "30.00", "HSBC", "Transport", None),
+            ("2026-05-10 10:00:00", "50.50", "DBS", "Groceries", "weekly run"),
+        ])
+        msg = build_recent_transactions_message(rows, 5)
+        self.assertIn("Last 2 transactions:", msg)
+        self.assertIn("$30.00 on HSBC (Transport)", msg)
+        self.assertIn("$50.50 on DBS (Groceries) — weekly run", msg)
+
+    def test_singular_label_for_one_entry(self):
+        rows = self._rows([("2026-05-12 11:00:00", "5.00", "DBS", "Food", None)])
+        msg = build_recent_transactions_message(rows, 5)
+        self.assertIn("Last 1 transaction:", msg)
+
+    def test_empty_returns_friendly_message(self):
+        self.assertEqual(build_recent_transactions_message([], 5), "No transactions logged yet.")
 
 
 # ── Category chart ────────────────────────────────────────────────────────────
@@ -451,6 +475,20 @@ class DBTests(unittest.TestCase):
 
     def test_get_last_spend_returns_none_when_empty(self):
         self.assertIsNone(db.get_last_spend())
+
+    def test_get_recent_spend_rows_returns_newest_first(self):
+        for day, amt in [(10, "10.00"), (11, "20.00"), (12, "30.00")]:
+            db.append_spend(datetime(2026, 5, day, 10, 0), Decimal(amt), "DBS", "Food")
+        rows = db.get_recent_spend_rows(5)
+        self.assertEqual([r.amount for r in rows], ["30.00", "20.00", "10.00"])
+
+    def test_get_recent_spend_rows_respects_limit(self):
+        for day in range(1, 9):
+            db.append_spend(datetime(2026, 5, day, 10, 0), Decimal("1.00"), "DBS", "Food")
+        self.assertEqual(len(db.get_recent_spend_rows(5)), 5)
+
+    def test_get_recent_spend_rows_empty(self):
+        self.assertEqual(db.get_recent_spend_rows(5), [])
 
     def test_delete_last_spend_removes_most_recent(self):
         db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("10.00"), "DBS", "Food")

@@ -246,6 +246,15 @@ def get_spend_rows_in_range(start: date, end: date) -> list[SpendEntry]:
     return [_row_to_entry(r) for r in rows]
 
 
+def get_recent_spend_rows(limit: int = 5) -> list[SpendEntry]:
+    rows = _db().execute(
+        "SELECT timestamp, amount, card, category, remarks FROM spend_entries "
+        "ORDER BY id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [_row_to_entry(r) for r in rows]
+
+
 def get_last_spend() -> SpendEntry | None:
     row = _db().execute(
         "SELECT timestamp, amount, card, category, remarks FROM spend_entries ORDER BY id DESC LIMIT 1"

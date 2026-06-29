@@ -119,6 +119,20 @@ def build_spend_summary_message(
     return "\n".join(lines)
 
 
+def build_recent_transactions_message(rows: list[SpendEntry], limit: int = 5) -> str:
+    if not rows:
+        return "No transactions logged yet."
+
+    lines = [f"Last {len(rows)} transaction" + ("s" if len(rows) != 1 else "") + ":"]
+    for row in rows:
+        remark = f" — {row.remarks}" if row.remarks else ""
+        lines.append(
+            f"• {row.timestamp}: ${format_money(Decimal(row.amount))} "
+            f"on {row.card} ({row.category}){remark}"
+        )
+    return "\n".join(lines)
+
+
 def aggregate_category_totals(
     rows: list[SpendEntry], today: date, exclude_one_off: bool = False
 ) -> dict[str, Decimal]:

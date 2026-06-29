@@ -11,7 +11,12 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
 import db
 from logic.chart import build_category_pie_image
-from logic.formatting import aggregate_category_totals, build_spend_summary_message, format_money
+from logic.formatting import (
+    aggregate_category_totals,
+    build_recent_transactions_message,
+    build_spend_summary_message,
+    format_money,
+)
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
@@ -49,6 +54,11 @@ def _one_off_prompt_keyboard(month_str: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Yes", callback_data=f"chart:exclude:{month_str}"),
          InlineKeyboardButton("No", callback_data=f"chart:include:{month_str}")],
     ])
+
+
+async def transactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    rows = db.get_recent_spend_rows(5)
+    await update.effective_message.reply_text(build_recent_transactions_message(rows, 5))
 
 
 async def category_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -124,6 +134,7 @@ async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 def get_handlers() -> list:
     return [
         CommandHandler("spend_summary", spend_summary),
+        CommandHandler("transactions", transactions),
         CommandHandler("category_chart", category_chart),
         CommandHandler("export", export_csv),
         CallbackQueryHandler(category_chart_callback, pattern=r"^chart:"),
