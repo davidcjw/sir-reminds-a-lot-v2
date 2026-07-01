@@ -1,5 +1,6 @@
 # Sir Reminds A Lot
 
+[![CI](https://github.com/davidcjw/sir-reminds-a-lot-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/davidcjw/sir-reminds-a-lot-v2/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Docker](https://img.shields.io/badge/docker-supported-blue)
