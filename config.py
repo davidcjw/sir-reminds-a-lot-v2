@@ -17,6 +17,31 @@ class BotConfig:
     reminder_time: time
     reminder_timezone: ZoneInfo
     reminder_days_before: int
+    allowed_chat_ids: list[int]
+
+
+def _parse_allowed_chat_ids(raw: str, fallback: int | str | None) -> list[int]:
+    """Parse the ALLOWED_CHAT_IDS allowlist.
+
+    Accepts a comma-separated list of Telegram user/chat IDs. If the env var is
+    unset/blank, falls back to the reminder chat ID (when it is a numeric ID).
+    If nothing is configured, returns an EMPTY list so the bot FAILS CLOSED and
+    rejects every sender — never fail open.
+    """
+    ids: list[int] = []
+    if raw:
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                ids.append(int(part))
+            except ValueError:
+                # Ignore non-numeric entries rather than silently opening access.
+                continue
+    if not ids and isinstance(fallback, int):
+        ids.append(fallback)
+    return ids
 
 
 def load_config() -> BotConfig:
@@ -46,6 +71,10 @@ def load_config() -> BotConfig:
 
     days_before = int(os.getenv("TELEGRAM_REMINDER_DAYS_BEFORE", "3").strip())
 
+    allowed_chat_ids = _parse_allowed_chat_ids(
+        os.getenv("ALLOWED_CHAT_IDS", "").strip(), reminder_chat_id
+    )
+
     return BotConfig(
         token=token,
         database_path=db_path,
@@ -53,4 +82,5 @@ def load_config() -> BotConfig:
         reminder_time=reminder_time,
         reminder_timezone=timezone,
         reminder_days_before=days_before,
+        allowed_chat_ids=allowed_chat_ids,
     )

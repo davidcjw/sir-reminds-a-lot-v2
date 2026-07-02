@@ -305,6 +305,25 @@ Send `/admin` to the bot and use the inline menu to set up:
 | **Merchants** | Merchant → category mappings (e.g. NTUC → Groceries) |
 | **Rules** | Category → card recommendation (e.g. Groceries → UOB Ladies) |
 
+## Access control (required)
+
+This bot exposes your full financial history (`/export`, `/spend_summary`,
+`/admin`, …), so it must only answer **you**. Access is restricted with an
+allowlist of Telegram user/chat IDs:
+
+```
+ALLOWED_CHAT_IDS=<your chat id>          # comma-separated for multiple IDs
+```
+
+Get your ID by sending `/chatid` to the bot. Rules:
+
+- Any sender whose user **or** chat ID is not on the list is rejected with an
+  "unauthorized" message and cannot reach any command.
+- If `ALLOWED_CHAT_IDS` is blank, the bot falls back to
+  `TELEGRAM_REMINDER_CHAT_ID`.
+- If **nothing** is set, the bot **fails closed** and rejects every command —
+  it will not serve anyone until you configure an allowlist.
+
 ## Optional: daily reminders
 
 Get your chat ID by sending `/chatid` to the bot, then add to `.env`:

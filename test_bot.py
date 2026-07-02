@@ -575,6 +575,100 @@ class ConfigTests(unittest.TestCase):
             cfg = load_config()
         self.assertEqual(cfg.reminder_chat_id, 123456)
 
+    def test_allowlist_empty_when_nothing_set_fails_closed(self, _dotenv):
+        from config import load_config
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok"}, clear=True):
+            cfg = load_config()
+        self.assertEqual(cfg.allowed_chat_ids, [])
+
+    def test_allowlist_falls_back_to_reminder_chat_id(self, _dotenv):
+        from config import load_config
+        with patch.dict(os.environ, {
+            "TELEGRAM_BOT_TOKEN": "tok",
+            "TELEGRAM_REMINDER_CHAT_ID": "123456",
+        }, clear=True):
+            cfg = load_config()
+        self.assertEqual(cfg.allowed_chat_ids, [123456])
+
+    def test_allowlist_parses_comma_separated_ids(self, _dotenv):
+        from config import load_config
+        with patch.dict(os.environ, {
+            "TELEGRAM_BOT_TOKEN": "tok",
+            "ALLOWED_CHAT_IDS": "111, 222 ,333",
+        }, clear=True):
+            cfg = load_config()
+        self.assertEqual(cfg.allowed_chat_ids, [111, 222, 333])
+
+    def test_allowlist_takes_precedence_over_reminder_fallback(self, _dotenv):
+        from config import load_config
+        with patch.dict(os.environ, {
+            "TELEGRAM_BOT_TOKEN": "tok",
+            "ALLOWED_CHAT_IDS": "111",
+            "TELEGRAM_REMINDER_CHAT_ID": "999",
+        }, clear=True):
+            cfg = load_config()
+        self.assertEqual(cfg.allowed_chat_ids, [111])
+
+    def test_allowlist_ignores_non_numeric_entries(self, _dotenv):
+        from config import load_config
+        with patch.dict(os.environ, {
+            "TELEGRAM_BOT_TOKEN": "tok",
+            "ALLOWED_CHAT_IDS": "111,abc,222",
+        }, clear=True):
+            cfg = load_config()
+        self.assertEqual(cfg.allowed_chat_ids, [111, 222])
+
+
+# ── Authorization gate ──────────────────────────────────────────────────────────
+
+class AuthorizationGateTests(unittest.IsolatedAsyncioTestCase):
+    def _update(self, user_id, chat_id):
+        from unittest.mock import AsyncMock, MagicMock
+        update = MagicMock()
+        update.effective_user.id = user_id
+        update.effective_chat.id = chat_id
+        update.effective_message.reply_text = AsyncMock()
+        return update
+
+    def _context(self, allowed):
+        from unittest.mock import MagicMock
+        config = MagicMock()
+        config.allowed_chat_ids = allowed
+        context = MagicMock()
+        context.bot_data = {"config": config}
+        return context
+
+    async def test_authorized_user_passes(self):
+        import bot
+        update = self._update(user_id=111, chat_id=555)
+        context = self._context(allowed=[111])
+        # Returns without raising → downstream handlers run.
+        await bot.authorize(update, context)
+        update.effective_message.reply_text.assert_not_called()
+
+    async def test_authorized_by_chat_id_passes(self):
+        import bot
+        update = self._update(user_id=999, chat_id=555)
+        context = self._context(allowed=[555])
+        await bot.authorize(update, context)
+
+    async def test_unauthorized_sender_is_blocked(self):
+        import bot
+        from telegram.ext import ApplicationHandlerStop
+        update = self._update(user_id=222, chat_id=666)
+        context = self._context(allowed=[111])
+        with self.assertRaises(ApplicationHandlerStop):
+            await bot.authorize(update, context)
+        update.effective_message.reply_text.assert_awaited_once()
+
+    async def test_empty_allowlist_rejects_everyone(self):
+        import bot
+        from telegram.ext import ApplicationHandlerStop
+        update = self._update(user_id=111, chat_id=555)
+        context = self._context(allowed=[])
+        with self.assertRaises(ApplicationHandlerStop):
+            await bot.authorize(update, context)
+
 
 if __name__ == "__main__":
     unittest.main()
