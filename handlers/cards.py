@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes

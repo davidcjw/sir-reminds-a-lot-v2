@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from difflib import SequenceMatcher
 
 from db import Card, SpendEntry
-from logic.billing import billing_period, find_due_reminders
+from logic.billing import billing_period
 
 MONEY_QUANTIZER = Decimal("0.01")
 

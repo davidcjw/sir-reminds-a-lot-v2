@@ -4,7 +4,7 @@ import calendar
 import csv
 import io
 import logging
-from datetime import date, timezone, datetime
+from datetime import date, datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
@@ -17,7 +17,6 @@ from logic.formatting import (
     build_spend_summary_message,
     format_money,
 )
-from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
