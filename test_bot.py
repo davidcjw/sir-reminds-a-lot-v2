@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import db
 from db import Card, SpendEntry
-from logic.billing import billing_period, find_due_reminders
+from logic.billing import billing_period, find_due_reminders, resolve_due_date
 from logic.formatting import (
     aggregate_category_totals,
     build_due_reminder_messages,
@@ -72,6 +72,64 @@ class BillingPeriodTests(unittest.TestCase):
         self.assertEqual(start, date(2026, 2, 28))
         self.assertEqual(end, date(2026, 3, 30))
 
+    def test_cycle_29_clamps_end_in_short_february(self):
+        # cycle=29, today=Jan 31 2027 (non-leap) → 29 Jan – 28 Feb (28 = min(28, 28))
+        start, end = billing_period(29, date(2027, 1, 31))
+        self.assertEqual(start, date(2027, 1, 29))
+        self.assertEqual(end, date(2027, 2, 28))
+
+    def test_cycle_30_clamps_end_in_short_february(self):
+        # cycle=30, today=Jan 31 2027 → 30 Jan – 28 Feb (end 29 clamps to 28)
+        start, end = billing_period(30, date(2027, 1, 31))
+        self.assertEqual(start, date(2027, 1, 30))
+        self.assertEqual(end, date(2027, 2, 28))
+
+    def test_cycle_31_clamps_end_in_short_february(self):
+        # cycle=31, today=Feb 15 2027 → 31 Jan – 28 Feb (end 30 clamps to 28)
+        start, end = billing_period(31, date(2027, 2, 15))
+        self.assertEqual(start, date(2027, 1, 31))
+        self.assertEqual(end, date(2027, 2, 28))
+
+    def test_cycle_31_start_clamps_to_short_february(self):
+        # cycle=31, today=Mar 15 2028 (leap) → start clamps to Feb 29, end Mar 30
+        start, end = billing_period(31, date(2028, 3, 15))
+        self.assertEqual(start, date(2028, 2, 29))
+        self.assertEqual(end, date(2028, 3, 30))
+
+    def test_cycle_29_starts_on_leap_day(self):
+        # cycle=29, today=Feb 29 2028 (leap) → start is the real Feb 29
+        start, end = billing_period(29, date(2028, 2, 29))
+        self.assertEqual(start, date(2028, 2, 29))
+        self.assertEqual(end, date(2028, 3, 28))
+
+    def test_cycle_29_wraps_over_year_end(self):
+        # cycle=29, today=Dec 31 2026 → 29 Dec 2026 – 28 Jan 2027
+        start, end = billing_period(29, date(2026, 12, 31))
+        self.assertEqual(start, date(2026, 12, 29))
+        self.assertEqual(end, date(2027, 1, 28))
+
+
+# ── Due-day resolution ──────────────────────────────────────────────────────────
+
+class ResolveDueDateTests(unittest.TestCase):
+    def test_31st_clamps_to_last_day_of_short_month(self):
+        self.assertEqual(resolve_due_date("31st", 2027, 2), date(2027, 2, 28))
+
+    def test_30th_clamps_in_non_leap_february(self):
+        self.assertEqual(resolve_due_date("30th", 2027, 2), date(2027, 2, 28))
+
+    def test_29th_clamps_in_non_leap_february(self):
+        self.assertEqual(resolve_due_date("29th", 2027, 2), date(2027, 2, 28))
+
+    def test_29th_is_kept_in_leap_february(self):
+        self.assertEqual(resolve_due_date("29th", 2028, 2), date(2028, 2, 29))
+
+    def test_last_day_of_february_leap_year(self):
+        self.assertEqual(resolve_due_date("last day of month", 2028, 2), date(2028, 2, 29))
+
+    def test_31st_in_30_day_month_clamps_to_30(self):
+        self.assertEqual(resolve_due_date("31st", 2026, 6), date(2026, 6, 30))
+
 
 # ── Due date reminders ────────────────────────────────────────────────────────
 
@@ -102,6 +160,33 @@ class DueDateReminderTests(unittest.TestCase):
             days_ahead=3,
         )
         self.assertEqual(reminders, [("UOB", "last day of month", date(2026, 5, 31))])
+
+    def test_days_until_due_crosses_month_boundary(self):
+        # today=Apr 29, due "1st" → resolves to May 1 in the 3-day window
+        reminders = find_due_reminders(
+            [("Citi", "1st")],
+            today=date(2026, 4, 29),
+            days_ahead=3,
+        )
+        self.assertEqual(reminders, [("Citi", "1st", date(2026, 5, 1))])
+
+    def test_days_until_due_crosses_year_boundary(self):
+        # today=Dec 30 2026, due "1st" → resolves to Jan 1 2027
+        reminders = find_due_reminders(
+            [("Citi", "1st")],
+            today=date(2026, 12, 30),
+            days_ahead=3,
+        )
+        self.assertEqual(reminders, [("Citi", "1st", date(2027, 1, 1))])
+
+    def test_due_31st_clamps_in_short_month_within_window(self):
+        # June has 30 days: "31st" resolves to Jun 30, reached from Jun 29
+        reminders = find_due_reminders(
+            [("AMEX", "31st")],
+            today=date(2026, 6, 29),
+            days_ahead=3,
+        )
+        self.assertEqual(reminders, [("AMEX", "31st", date(2026, 6, 30))])
 
     def test_empty_window_message(self):
         messages = build_due_reminder_messages([], today=date(2026, 5, 8), days_ahead=3)
@@ -139,6 +224,34 @@ class NextRunTests(unittest.TestCase):
     def test_rolls_over_year_end(self):
         now = datetime(2026, 12, 31, 10, 0)
         self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 1, 1, 9, 0))
+
+    def test_rolls_over_30_day_month_end(self):
+        now = datetime(2026, 4, 30, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 1, 9, 0))
+
+    def test_rolls_over_non_leap_february_end(self):
+        # Feb 28 2027 is the last day of a non-leap February.
+        now = datetime(2027, 2, 28, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 3, 1, 9, 0))
+
+    def test_rolls_from_feb_28_to_leap_day(self):
+        # 2028 is a leap year: the day after Feb 28 is Feb 29, not Mar 1.
+        now = datetime(2028, 2, 28, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2028, 2, 29, 9, 0))
+
+    def test_rolls_over_leap_day_end(self):
+        now = datetime(2028, 2, 29, 10, 0)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2028, 3, 1, 9, 0))
+
+    def test_exact_regression_scenario_does_not_raise(self):
+        # Reproduces the original crash: replace(day=31+1) raised ValueError and
+        # killed due_reminder_loop. timedelta(days=1) must roll to the next month.
+        now = datetime(2026, 5, 31, 23, 30)
+        try:
+            result = _next_run(now, time(9, 0))
+        except ValueError:
+            self.fail("_next_run raised ValueError on month-end (the fixed crash)")
+        self.assertEqual(result, datetime(2026, 6, 1, 9, 0))
 
 
 # ── Spend amount ──────────────────────────────────────────────────────────────
