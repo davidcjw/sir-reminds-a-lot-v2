@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import calendar as cal
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -14,7 +15,12 @@ from telegram.ext import (
 )
 
 import db
-from logic.formatting import format_spend_draft, parse_spend_amount, update_spend_amount
+from logic.formatting import (
+    format_spend_draft,
+    parse_backdate_date,
+    parse_spend_amount,
+    update_spend_amount,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +71,74 @@ def _remark_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def _save_spend(state: dict, remarks: str | None) -> str:
+def _backdate_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Yes", callback_data="spend:backdate:yes"),
+         InlineKeyboardButton("No", callback_data="spend:backdate:no")],
+        [InlineKeyboardButton("❌ Cancel", callback_data="spend:cancel")],
+    ])
+
+
+_CALENDAR_WEEKDAY_HEADERS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+
+
+def _calendar_keyboard(year: int, month: int, today: date) -> InlineKeyboardMarkup:
+    """Tap-driven month calendar: prev/next nav, future days disabled."""
+    rows = []
+
+    prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+    is_current_month = (year, month) == (today.year, today.month)
+    nav_row = [
+        InlineKeyboardButton("‹", callback_data=f"spend:cal:nav:{prev_year}:{prev_month}"),
+        InlineKeyboardButton(date(year, month, 1).strftime("%B %Y"), callback_data="spend:cal:noop"),
+    ]
+    if is_current_month:
+        nav_row.append(InlineKeyboardButton(" ", callback_data="spend:cal:noop"))
+    else:
+        next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+        nav_row.append(InlineKeyboardButton("›", callback_data=f"spend:cal:nav:{next_year}:{next_month}"))
+    rows.append(nav_row)
+
+    rows.append([InlineKeyboardButton(d, callback_data="spend:cal:noop") for d in _CALENDAR_WEEKDAY_HEADERS])
+
+    for week in cal.monthcalendar(year, month):
+        week_row = []
+        for day in week:
+            if day == 0:
+                week_row.append(InlineKeyboardButton(" ", callback_data="spend:cal:noop"))
+                continue
+            day_date = date(year, month, day)
+            label = f"•{day}" if day_date == today else str(day)
+            if day_date > today:
+                week_row.append(InlineKeyboardButton(label, callback_data="spend:cal:noop"))
+            else:
+                week_row.append(
+                    InlineKeyboardButton(label, callback_data=f"spend:cal:pick:{year}:{month}:{day}")
+                )
+        rows.append(week_row)
+
+    rows.append([InlineKeyboardButton("❌ Cancel", callback_data="spend:cancel")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _spend_summary_line(state: dict) -> str:
+    line = f"Amount: ${state['amount']}\nCard: {state['card']}\nCategory: {state['category']}"
+    remarks = state.get("remarks")
+    if remarks:
+        line += f"\nRemark: {remarks}"
+    return line
+
+
+def _save_spend(state: dict, remarks: str | None, timestamp: datetime | None = None) -> str:
     amount = Decimal(state["amount"])
     card = state["card"]
     category = state["category"]
-    timestamp = datetime.now(tz=timezone.utc)
-    db.append_spend(timestamp, amount, card, category, remarks)
+    backdated = timestamp is not None
+    ts = timestamp or datetime.now(tz=timezone.utc)
+    db.append_spend(ts, amount, card, category, remarks)
     suffix = f" — {remarks}" if remarks else ""
-    return f"✅ Logged: ${amount:.2f} on {card} ({category}){suffix}"
+    date_note = f" (backdated to {ts.date().isoformat()})" if backdated else ""
+    return f"✅ Logged: ${amount:.2f} on {card} ({category}){suffix}{date_note}"
 
 
 async def spend_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -99,7 +165,7 @@ async def spend_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     data = query.data or ""
     state = context.user_data.get("spend", {})
 
-    if data == "spend:noop":
+    if data in ("spend:noop", "spend:cal:noop"):
         return
 
     if data == "spend:cancel":
@@ -169,19 +235,59 @@ async def spend_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if state.get("with_remarks"):
             state["waiting_remarks"] = True
             await query.edit_message_text(
-                f"Amount: ${state['amount']}\nCard: {state['card']}\nCategory: {state['category']}"
-                f"\n\nAdd a remark, or skip:",
+                f"{_spend_summary_line(state)}\n\nAdd a remark, or skip:",
                 reply_markup=_remark_keyboard(),
             )
         else:
-            confirmation = _save_spend(state, remarks=None)
-            context.user_data.pop("spend", None)
-            await query.edit_message_text(confirmation)
+            await query.edit_message_text(
+                f"{_spend_summary_line(state)}\n\nBackdate this transaction?",
+                reply_markup=_backdate_keyboard(),
+            )
         return
 
     # ── Skip remark ──────────────────────────────────────────────────────────
     if data == "spend:skip_remark":
-        confirmation = _save_spend(state, remarks=None)
+        await query.edit_message_text(
+            f"{_spend_summary_line(state)}\n\nBackdate this transaction?",
+            reply_markup=_backdate_keyboard(),
+        )
+        return
+
+    # ── Backdate? ────────────────────────────────────────────────────────────
+    if data == "spend:backdate:no":
+        confirmation = _save_spend(state, remarks=state.get("remarks"))
+        context.user_data.pop("spend", None)
+        await query.edit_message_text(confirmation)
+        return
+
+    if data == "spend:backdate:yes":
+        today = datetime.now(tz=timezone.utc).date()
+        await query.edit_message_text(
+            f"{_spend_summary_line(state)}\n\nSelect a date:",
+            reply_markup=_calendar_keyboard(today.year, today.month, today),
+        )
+        return
+
+    # ── Calendar navigation / date pick ────────────────────────────────────────
+    if data.startswith("spend:cal:nav:"):
+        _, _, _, year_s, month_s = data.split(":")
+        today = datetime.now(tz=timezone.utc).date()
+        await query.edit_message_text(
+            f"{_spend_summary_line(state)}\n\nSelect a date:",
+            reply_markup=_calendar_keyboard(int(year_s), int(month_s), today),
+        )
+        return
+
+    if data.startswith("spend:cal:pick:"):
+        _, _, _, year_s, month_s, day_s = data.split(":")
+        today = datetime.now(tz=timezone.utc).date()
+        try:
+            backdated = parse_backdate_date(f"{int(year_s):04d}-{int(month_s):02d}-{int(day_s):02d}", today)
+        except ValueError as e:
+            await query.answer(str(e), show_alert=True)
+            return
+        timestamp = datetime.combine(backdated, datetime.now(tz=timezone.utc).time(), tzinfo=timezone.utc)
+        confirmation = _save_spend(state, remarks=state.get("remarks"), timestamp=timestamp)
         context.user_data.pop("spend", None)
         await query.edit_message_text(confirmation)
         return
@@ -191,10 +297,12 @@ async def spend_remark_message(update: Update, context: ContextTypes.DEFAULT_TYP
     state = context.user_data.get("spend", {})
     if not state.get("waiting_remarks"):
         return
-    remarks = (update.message.text or "").strip() or None
-    confirmation = _save_spend(state, remarks=remarks)
-    context.user_data.pop("spend", None)
-    await update.message.reply_text(confirmation)
+    state["waiting_remarks"] = False
+    state["remarks"] = (update.message.text or "").strip() or None
+    await update.message.reply_text(
+        f"{_spend_summary_line(state)}\n\nBackdate this transaction?",
+        reply_markup=_backdate_keyboard(),
+    )
 
 
 async def delete_last(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

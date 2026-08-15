@@ -88,6 +88,17 @@ def format_spend_draft(raw: str) -> str:
     return f"${raw or '0'}"
 
 
+def parse_backdate_date(raw: str, today: date) -> date:
+    cleaned = raw.strip()
+    try:
+        parsed = datetime.strptime(cleaned, "%Y-%m-%d").date()  # noqa: DTZ007 (date-only, no tz needed)
+    except ValueError as exc:
+        raise ValueError("Enter the date as YYYY-MM-DD, e.g. 2026-08-01.") from exc
+    if parsed > today:
+        raise ValueError("Date can't be in the future.")
+    return parsed
+
+
 def build_spend_summary_message(
     cards: list[Card],
     rows: list[SpendEntry],
