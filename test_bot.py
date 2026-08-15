@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db
 from db import Card, SpendEntry
 from handlers.reminders import _next_run
+from handlers.spend import _calendar_keyboard
 from logic.billing import billing_period, find_due_reminders, resolve_due_date
 from logic.chart import build_category_pie_image
 from logic.formatting import (
@@ -22,6 +23,7 @@ from logic.formatting import (
     build_spend_summary_message,
     find_matching_rules,
     is_one_off,
+    parse_backdate_date,
     parse_spend_amount,
     update_spend_amount,
 )
@@ -289,6 +291,84 @@ class SpendAmountTests(unittest.TestCase):
     def test_parse_rejects_non_numeric(self):
         with self.assertRaises(ValueError):
             parse_spend_amount("abc")
+
+
+# ── Backdate ──────────────────────────────────────────────────────────────────
+
+class ParseBackdateDateTests(unittest.TestCase):
+    def test_parses_iso_date(self):
+        self.assertEqual(
+            parse_backdate_date("2026-08-01", date(2026, 8, 15)),
+            date(2026, 8, 1),
+        )
+
+    def test_accepts_today(self):
+        self.assertEqual(
+            parse_backdate_date("2026-08-15", date(2026, 8, 15)),
+            date(2026, 8, 15),
+        )
+
+    def test_strips_whitespace(self):
+        self.assertEqual(
+            parse_backdate_date("  2026-08-01  ", date(2026, 8, 15)),
+            date(2026, 8, 1),
+        )
+
+    def test_rejects_future_date(self):
+        with self.assertRaises(ValueError):
+            parse_backdate_date("2026-08-16", date(2026, 8, 15))
+
+    def test_rejects_unparseable_date(self):
+        with self.assertRaises(ValueError):
+            parse_backdate_date("not a date", date(2026, 8, 15))
+
+    def test_rejects_wrong_format(self):
+        with self.assertRaises(ValueError):
+            parse_backdate_date("01/08/2026", date(2026, 8, 15))
+
+
+class CalendarKeyboardTests(unittest.TestCase):
+    def _buttons(self, markup):
+        return [b for row in markup.inline_keyboard for b in row]
+
+    def test_header_shows_month_and_year(self):
+        markup = _calendar_keyboard(2026, 8, date(2026, 8, 15))
+        self.assertEqual(markup.inline_keyboard[0][1].text, "August 2026")
+
+    def test_next_button_hidden_for_current_month(self):
+        markup = _calendar_keyboard(2026, 8, date(2026, 8, 15))
+        nav_row = markup.inline_keyboard[0]
+        self.assertEqual(nav_row[-1].callback_data, "spend:cal:noop")
+
+    def test_next_button_shown_for_past_month(self):
+        markup = _calendar_keyboard(2026, 7, date(2026, 8, 15))
+        nav_row = markup.inline_keyboard[0]
+        self.assertEqual(nav_row[-1].callback_data, "spend:cal:nav:2026:8")
+
+    def test_prev_button_targets_previous_month(self):
+        markup = _calendar_keyboard(2026, 8, date(2026, 8, 15))
+        nav_row = markup.inline_keyboard[0]
+        self.assertEqual(nav_row[0].callback_data, "spend:cal:nav:2026:7")
+
+    def test_prev_button_wraps_year_boundary(self):
+        markup = _calendar_keyboard(2026, 1, date(2026, 8, 15))
+        nav_row = markup.inline_keyboard[0]
+        self.assertEqual(nav_row[0].callback_data, "spend:cal:nav:2025:12")
+
+    def test_future_days_are_disabled(self):
+        markup = _calendar_keyboard(2026, 8, date(2026, 8, 15))
+        future_button = next(b for b in self._buttons(markup) if b.text == "20")
+        self.assertEqual(future_button.callback_data, "spend:cal:noop")
+
+    def test_past_day_is_pickable(self):
+        markup = _calendar_keyboard(2026, 8, date(2026, 8, 15))
+        past_button = next(b for b in self._buttons(markup) if b.text == "10")
+        self.assertEqual(past_button.callback_data, "spend:cal:pick:2026:8:10")
+
+    def test_today_is_marked_and_pickable(self):
+        markup = _calendar_keyboard(2026, 8, date(2026, 8, 15))
+        today_button = next(b for b in self._buttons(markup) if b.text == "•15")
+        self.assertEqual(today_button.callback_data, "spend:cal:pick:2026:8:15")
 
 
 # ── Spend summary ─────────────────────────────────────────────────────────────
