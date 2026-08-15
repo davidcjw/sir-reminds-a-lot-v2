@@ -2,16 +2,19 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import db
 from db import Card, SpendEntry
+from handlers.reminders import _next_run
 from logic.billing import billing_period, find_due_reminders, resolve_due_date
+from logic.chart import build_category_pie_image
 from logic.formatting import (
     aggregate_category_totals,
     build_due_reminder_messages,
@@ -22,9 +25,6 @@ from logic.formatting import (
     parse_spend_amount,
     update_spend_amount,
 )
-from logic.chart import build_category_pie_image
-from handlers.reminders import _next_run
-
 
 # ── Billing period ────────────────────────────────────────────────────────────
 
@@ -209,49 +209,49 @@ class DueDateReminderTests(unittest.TestCase):
 
 class NextRunTests(unittest.TestCase):
     def test_same_day_when_time_not_yet_passed(self):
-        now = datetime(2026, 5, 15, 8, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 15, 9, 0))
+        now = datetime(2026, 5, 15, 8, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 15, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_to_next_day_when_time_passed(self):
-        now = datetime(2026, 5, 15, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 16, 9, 0))
+        now = datetime(2026, 5, 15, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 16, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_over_last_day_of_month(self):
         # Regression: day+1 used to raise ValueError on month-end, killing the loop.
-        now = datetime(2026, 5, 31, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 6, 1, 9, 0))
+        now = datetime(2026, 5, 31, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_over_year_end(self):
-        now = datetime(2026, 12, 31, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 1, 1, 9, 0))
+        now = datetime(2026, 12, 31, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 1, 1, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_over_30_day_month_end(self):
-        now = datetime(2026, 4, 30, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 1, 9, 0))
+        now = datetime(2026, 4, 30, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2026, 5, 1, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_over_non_leap_february_end(self):
         # Feb 28 2027 is the last day of a non-leap February.
-        now = datetime(2027, 2, 28, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 3, 1, 9, 0))
+        now = datetime(2027, 2, 28, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2027, 3, 1, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_from_feb_28_to_leap_day(self):
         # 2028 is a leap year: the day after Feb 28 is Feb 29, not Mar 1.
-        now = datetime(2028, 2, 28, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2028, 2, 29, 9, 0))
+        now = datetime(2028, 2, 28, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2028, 2, 29, 9, 0, tzinfo=timezone.utc))
 
     def test_rolls_over_leap_day_end(self):
-        now = datetime(2028, 2, 29, 10, 0)
-        self.assertEqual(_next_run(now, time(9, 0)), datetime(2028, 3, 1, 9, 0))
+        now = datetime(2028, 2, 29, 10, 0, tzinfo=timezone.utc)
+        self.assertEqual(_next_run(now, time(9, 0)), datetime(2028, 3, 1, 9, 0, tzinfo=timezone.utc))
 
     def test_exact_regression_scenario_does_not_raise(self):
         # Reproduces the original crash: replace(day=31+1) raised ValueError and
         # killed due_reminder_loop. timedelta(days=1) must roll to the next month.
-        now = datetime(2026, 5, 31, 23, 30)
+        now = datetime(2026, 5, 31, 23, 30, tzinfo=timezone.utc)
         try:
             result = _next_run(now, time(9, 0))
         except ValueError:
             self.fail("_next_run raised ValueError on month-end (the fixed crash)")
-        self.assertEqual(result, datetime(2026, 6, 1, 9, 0))
+        self.assertEqual(result, datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc))
 
 
 # ── Spend amount ──────────────────────────────────────────────────────────────
@@ -468,7 +468,7 @@ class OneOffDetectionTests(unittest.TestCase):
 # ── Card rule lookup ──────────────────────────────────────────────────────────
 
 class CardRuleLookupTests(unittest.TestCase):
-    RULES = [
+    RULES: ClassVar[list[tuple[str, str]]] = [
         ("Groceries", "UOB Ladies"),
         ("Food & Dining", "Maybank XL / UOB Ladies"),
         ("Transport", "UOB PPV"),
@@ -492,7 +492,9 @@ class CardRuleLookupTests(unittest.TestCase):
 
 class DBTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        # Path must outlive this method (used across setUp/tearDown/tests), so a
+        # `with` block doesn't fit — cleaned up explicitly in tearDown instead.
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)  # noqa: SIM115
         self._tmp.close()
         db.init(Path(self._tmp.name))
 
@@ -563,7 +565,7 @@ class DBTests(unittest.TestCase):
         self.assertEqual(db.get_merchant_aliases(), [])
 
     def test_append_and_read_spend_rows(self):
-        ts = datetime(2026, 5, 10, 10, 0, 0)
+        ts = datetime(2026, 5, 10, 10, 0, 0, tzinfo=timezone.utc)
         db.append_spend(ts, Decimal("42.50"), "DBS WWMC", "Groceries")
         rows = db.get_all_spend_rows()
         self.assertEqual(len(rows), 1)
@@ -572,15 +574,15 @@ class DBTests(unittest.TestCase):
         self.assertEqual(rows[0].category, "Groceries")
 
     def test_get_spend_rows_in_range_filters_by_date(self):
-        db.append_spend(datetime(2026, 4, 15, 10, 0), Decimal("99.00"), "DBS", "Food")
-        db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("42.00"), "DBS", "Food")
+        db.append_spend(datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc), Decimal("99.00"), "DBS", "Food")
+        db.append_spend(datetime(2026, 5, 10, 10, 0, tzinfo=timezone.utc), Decimal("42.00"), "DBS", "Food")
         rows = db.get_spend_rows_in_range(date(2026, 5, 1), date(2026, 5, 31))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].amount, "42.00")
 
     def test_get_last_spend_returns_most_recent(self):
-        db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("10.00"), "DBS", "Food")
-        db.append_spend(datetime(2026, 5, 11, 10, 0), Decimal("99.00"), "UOB", "Transport")
+        db.append_spend(datetime(2026, 5, 10, 10, 0, tzinfo=timezone.utc), Decimal("10.00"), "DBS", "Food")
+        db.append_spend(datetime(2026, 5, 11, 10, 0, tzinfo=timezone.utc), Decimal("99.00"), "UOB", "Transport")
         last = db.get_last_spend()
         self.assertIsNotNone(last)
         self.assertEqual(last.amount, "99.00")
@@ -591,21 +593,21 @@ class DBTests(unittest.TestCase):
 
     def test_get_recent_spend_rows_returns_newest_first(self):
         for day, amt in [(10, "10.00"), (11, "20.00"), (12, "30.00")]:
-            db.append_spend(datetime(2026, 5, day, 10, 0), Decimal(amt), "DBS", "Food")
+            db.append_spend(datetime(2026, 5, day, 10, 0, tzinfo=timezone.utc), Decimal(amt), "DBS", "Food")
         rows = db.get_recent_spend_rows(5)
         self.assertEqual([r.amount for r in rows], ["30.00", "20.00", "10.00"])
 
     def test_get_recent_spend_rows_respects_limit(self):
         for day in range(1, 9):
-            db.append_spend(datetime(2026, 5, day, 10, 0), Decimal("1.00"), "DBS", "Food")
+            db.append_spend(datetime(2026, 5, day, 10, 0, tzinfo=timezone.utc), Decimal("1.00"), "DBS", "Food")
         self.assertEqual(len(db.get_recent_spend_rows(5)), 5)
 
     def test_get_recent_spend_rows_empty(self):
         self.assertEqual(db.get_recent_spend_rows(5), [])
 
     def test_delete_last_spend_removes_most_recent(self):
-        db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("10.00"), "DBS", "Food")
-        db.append_spend(datetime(2026, 5, 11, 10, 0), Decimal("99.00"), "UOB", "Transport")
+        db.append_spend(datetime(2026, 5, 10, 10, 0, tzinfo=timezone.utc), Decimal("10.00"), "DBS", "Food")
+        db.append_spend(datetime(2026, 5, 11, 10, 0, tzinfo=timezone.utc), Decimal("99.00"), "UOB", "Transport")
         deleted = db.delete_last_spend()
         self.assertEqual(deleted.amount, "99.00")
         remaining = db.get_all_spend_rows()
@@ -616,17 +618,17 @@ class DBTests(unittest.TestCase):
         self.assertIsNone(db.delete_last_spend())
 
     def test_append_spend_with_remarks(self):
-        db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("42.00"), "DBS", "Food", remarks="birthday dinner")
+        db.append_spend(datetime(2026, 5, 10, 10, 0, tzinfo=timezone.utc), Decimal("42.00"), "DBS", "Food", remarks="birthday dinner")
         row = db.get_last_spend()
         self.assertEqual(row.remarks, "birthday dinner")
 
     def test_append_spend_without_remarks_defaults_to_none(self):
-        db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("10.00"), "DBS", "Food")
+        db.append_spend(datetime(2026, 5, 10, 10, 0, tzinfo=timezone.utc), Decimal("10.00"), "DBS", "Food")
         row = db.get_last_spend()
         self.assertIsNone(row.remarks)
 
     def test_remarks_included_in_range_query(self):
-        db.append_spend(datetime(2026, 5, 10, 10, 0), Decimal("20.00"), "DBS", "Food", remarks="note")
+        db.append_spend(datetime(2026, 5, 10, 10, 0, tzinfo=timezone.utc), Decimal("20.00"), "DBS", "Food", remarks="note")
         rows = db.get_spend_rows_in_range(date(2026, 5, 1), date(2026, 5, 31))
         self.assertEqual(rows[0].remarks, "note")
 
@@ -656,9 +658,11 @@ class DBTests(unittest.TestCase):
         def fake_access(path, mode):
             return Path(path) != db_path
 
-        with patch("db.os.access", side_effect=fake_access):
-            with self.assertRaisesRegex(db.DatabasePermissionError, "Database file exists but is not writable"):
-                db.init(db_path)
+        with (
+            patch("db.os.access", side_effect=fake_access),
+            self.assertRaisesRegex(db.DatabasePermissionError, "Database file exists but is not writable"),
+        ):
+            db.init(db_path)
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -667,12 +671,11 @@ class DBTests(unittest.TestCase):
 class ConfigTests(unittest.TestCase):
     def test_load_config_requires_token(self, _dotenv):
         from config import load_config
-        with patch.dict(os.environ, {}, clear=True):
-            with self.assertRaises(ValueError):
-                load_config()
+        with patch.dict(os.environ, {}, clear=True), self.assertRaises(ValueError):
+            load_config()
 
     def test_load_config_returns_botconfig(self, _dotenv):
-        from config import load_config, BotConfig
+        from config import BotConfig, load_config
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "test-token"}, clear=True):
             cfg = load_config()
         self.assertIsInstance(cfg, BotConfig)
@@ -766,8 +769,9 @@ class AuthorizationGateTests(unittest.IsolatedAsyncioTestCase):
         await bot.authorize(update, context)
 
     async def test_unauthorized_sender_is_blocked(self):
-        import bot
         from telegram.ext import ApplicationHandlerStop
+
+        import bot
         update = self._update(user_id=222, chat_id=666)
         context = self._context(allowed=[111])
         with self.assertRaises(ApplicationHandlerStop):
@@ -775,8 +779,9 @@ class AuthorizationGateTests(unittest.IsolatedAsyncioTestCase):
         update.effective_message.reply_text.assert_awaited_once()
 
     async def test_empty_allowlist_rejects_everyone(self):
-        import bot
         from telegram.ext import ApplicationHandlerStop
+
+        import bot
         update = self._update(user_id=111, chat_id=555)
         context = self._context(allowed=[])
         with self.assertRaises(ApplicationHandlerStop):

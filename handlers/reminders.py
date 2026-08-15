@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -20,7 +20,7 @@ async def reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     config = context.application.bot_data["config"]
     cards = db.get_cards()
     rows = [(c.name, c.due_day) for c in cards if c.due_day]
-    today = date.today()
+    today = datetime.now(tz=config.reminder_timezone).date()
     messages = build_due_reminder_messages(
         find_due_reminders(rows, today, config.reminder_days_before),
         today,
@@ -36,7 +36,7 @@ async def send_due_reminders(application: Application) -> None:
         return
     cards = db.get_cards()
     rows = [(c.name, c.due_day) for c in cards if c.due_day]
-    today = date.today()
+    today = datetime.now(tz=config.reminder_timezone).date()
     messages = build_due_reminder_messages(
         find_due_reminders(rows, today, config.reminder_days_before),
         today,

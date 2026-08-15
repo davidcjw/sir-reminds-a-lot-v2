@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from difflib import SequenceMatcher
 
 from db import Card, SpendEntry
@@ -104,7 +104,7 @@ def build_spend_summary_message(
         card_rows = [
             r for r in rows
             if r.card == card.name
-            and start <= datetime.strptime(r.timestamp, "%Y-%m-%d %H:%M:%S").date() <= end
+            and start <= datetime.strptime(r.timestamp, "%Y-%m-%d %H:%M:%S").date() <= end  # noqa: DTZ007 (stored naive)
         ]
         if not card_rows:
             continue
@@ -139,7 +139,7 @@ def aggregate_category_totals(
     totals: dict[str, Decimal] = {}
     for row in rows:
         try:
-            row_date = datetime.strptime(row.timestamp, "%Y-%m-%d %H:%M:%S").date()
+            row_date = datetime.strptime(row.timestamp, "%Y-%m-%d %H:%M:%S").date()  # noqa: DTZ007 (stored naive)
             amount = Decimal(row.amount)
         except (ValueError, InvalidOperation):
             continue
@@ -148,7 +148,7 @@ def aggregate_category_totals(
         if exclude_one_off and is_one_off(row):
             continue
         category = row.category.strip() or "Uncategorized"
-        totals[category] = totals.get(category, Decimal("0")) + amount
+        totals[category] = totals.get(category, Decimal(0)) + amount
     return totals
 
 
