@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
@@ -73,8 +74,8 @@ def _back_to(section: str) -> InlineKeyboardMarkup:
 async def _edit(query, text: str, markup: InlineKeyboardMarkup | None = None) -> None:
     try:
         await query.edit_message_text(text, reply_markup=markup)
-    except Exception:
-        pass
+    except TelegramError:
+        logger.debug("Failed to edit message (likely unchanged content)", exc_info=True)
 
 
 def _truncate(s: str, n: int = 30) -> str:

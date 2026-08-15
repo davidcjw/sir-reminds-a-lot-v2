@@ -21,16 +21,15 @@ from logic.formatting import (
 logger = logging.getLogger(__name__)
 
 
-def _parse_month_arg(args: list[str] | None) -> tuple[date, date, date]:
+def _parse_month_arg(args: list[str] | None, today: date) -> tuple[date, date, date]:
     """Parse optional YYYY-MM arg; returns (month_start, month_end, ref_date).
 
     ref_date is the first day of the month, used as 'today' for chart/aggregate
     functions that filter by today.year/today.month.
     """
-    today = date.today()
     if args:
         try:
-            ref = datetime.strptime(args[0], "%Y-%m").date()
+            ref = datetime.strptime(args[0], "%Y-%m").date()  # noqa: DTZ007 (month-only, no tz needed)
         except ValueError:
             ref = today.replace(day=1)
     else:
@@ -41,7 +40,8 @@ def _parse_month_arg(args: list[str] | None) -> tuple[date, date, date]:
 
 
 async def spend_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    today = date.today()
+    config = context.application.bot_data["config"]
+    today = datetime.now(tz=config.reminder_timezone).date()
     cards = db.get_cards()
     rows = db.get_all_spend_rows()
     text = build_spend_summary_message(cards, rows, today)
@@ -63,7 +63,9 @@ async def transactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def category_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Ask whether to exclude one-off transactions before building the chart.
     # The chosen month is carried through the callback via the button payload.
-    _, _, ref = _parse_month_arg(context.args)
+    config = context.application.bot_data["config"]
+    today = datetime.now(tz=config.reminder_timezone).date()
+    _, _, ref = _parse_month_arg(context.args, today)
     await update.effective_message.reply_text(
         "Exclude one-off transactions?",
         reply_markup=_one_off_prompt_keyboard(ref.strftime("%Y-%m")),
@@ -78,7 +80,9 @@ async def category_chart_callback(update: Update, context: ContextTypes.DEFAULT_
     parts = (query.data or "").split(":")
     exclude_one_off = len(parts) > 1 and parts[1] == "exclude"
     month_arg = parts[2] if len(parts) > 2 else None
-    start, end, ref = _parse_month_arg([month_arg] if month_arg else None)
+    config = context.application.bot_data["config"]
+    today = datetime.now(tz=config.reminder_timezone).date()
+    start, end, ref = _parse_month_arg([month_arg] if month_arg else None, today)
 
     rows = db.get_spend_rows_in_range(start, end)
     totals = aggregate_category_totals(rows, ref, exclude_one_off=exclude_one_off)
@@ -107,7 +111,9 @@ async def category_chart_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    start, end, ref = _parse_month_arg(context.args)
+    config = context.application.bot_data["config"]
+    today = datetime.now(tz=config.reminder_timezone).date()
+    start, end, ref = _parse_month_arg(context.args, today)
     rows = db.get_spend_rows_in_range(start, end)
 
     if not rows:

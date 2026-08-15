@@ -22,7 +22,6 @@ from pathlib import Path
 
 import db
 
-
 REQUIRED_COLS = {"Time", "Amount", "Card", "Category"}
 
 
@@ -38,7 +37,7 @@ def load_csv(path: Path) -> list[dict]:
 
 def parse_row(row: dict, line: int) -> tuple[datetime, Decimal, str, str, str | None] | None:
     try:
-        ts = datetime.strptime(row["Time"].strip(), "%Y-%m-%d %H:%M:%S")
+        ts = datetime.strptime(row["Time"].strip(), "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007 (source has no tz)
     except ValueError:
         print(f"  line {line}: skipping — bad timestamp {row['Time']!r}", file=sys.stderr)
         return None

@@ -5,6 +5,7 @@ import sys
 
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.constants import MessageEntityType
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     ApplicationHandlerStop,
@@ -87,8 +88,8 @@ async def authorize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await update.effective_message.reply_text(
                 "⛔ You are not authorized to use this bot."
             )
-        except Exception:  # pragma: no cover - best-effort notice only
-            pass
+        except TelegramError:  # pragma: no cover - best-effort notice only
+            logger.debug("Failed to notify unauthorized sender", exc_info=True)
     # Stop propagation so NO downstream handler runs for this sender.
     raise ApplicationHandlerStop
 
